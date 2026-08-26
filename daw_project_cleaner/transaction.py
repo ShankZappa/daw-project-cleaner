@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 
-from . import __version__
+from . import PURGE_ENABLED, __version__
 from .format import parse_project
 from .model import BackupResult, MediaItem, ScanReport
 from .rewrite_profiles import (
@@ -1139,6 +1139,11 @@ def purge_session(session_entry: Path, confirmation: str) -> int:
     Every path and digest is revalidated before the first unlink. Progress is
     persisted after each file so an interrupted purge can be resumed safely.
     """
+    if not PURGE_ENABLED:
+        raise SafetyError(
+            "This build has no permanent deletion. Quarantined files stay "
+            "recoverable and Restore returns them to their original paths."
+        )
     if confirmation != "DELETE QUARANTINE PERMANENTLY":
         raise SafetyError("Permanent deletion confirmation did not match")
     session, state_path, state, root = _load_session(session_entry)

@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import PURGE_ENABLED, __version__
 from .model import report_from_dict
 from .archive_audit import audit_archive, save_audit
 from .archive_queue import build_archive_queue
@@ -123,7 +123,11 @@ def _dispatch() -> None:
     prepare.add_argument("--confirm", required=True)
     restore = commands.add_parser("restore", help="Return every file in a quarantine session to its exact source")
     restore.add_argument("session", type=Path)
-    purge = commands.add_parser("purge", help="Permanently delete a validated session after the recovery window")
+    purge = commands.add_parser(
+        "purge",
+        **({"help": "Permanently delete a validated session after the recovery window"}
+           if PURGE_ENABLED else {}),
+    )
     purge.add_argument("session", type=Path)
     purge.add_argument("--confirm", required=True)
     audit = commands.add_parser("archive-audit", **internal())

@@ -478,6 +478,19 @@ class TransactionTests(unittest.TestCase):
             state = json.loads((session / "state.json").read_text())
             self.assertEqual(state["tool_version"], __version__)
 
+    def test_a_build_without_purge_refuses_before_doing_anything(self):
+        """The beta ships without permanent deletion; absent, not merely gated."""
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _project, media = self.fixture(root)
+            session = quarantine_report(scan_root(root))
+            with patch("daw_project_cleaner.transaction.PURGE_ENABLED", False):
+                with self.assertRaisesRegex(SafetyError, "no permanent deletion"):
+                    purge_session(session, "DELETE QUARANTINE PERMANENTLY")
+            self.assertFalse(media.exists())
+            self.assertEqual(restore_session(session), 1)
+            self.assertTrue(media.is_file())
+
     def test_shared_quarantine_location_round_trip(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)

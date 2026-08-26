@@ -77,6 +77,36 @@ filename where it should have looked at the filesystem.
 - Raise the minimum window size to 900x580 to keep the result tables usable
   beside the fixed-width sidebar.
 
+### Traceability
+
+- `daw-project-cleaner --version`. There was no way to ask a build what it was.
+- Every scan report and every quarantine session now records `tool_version`.
+  A report authorises a destructive transaction, so it has to name the build
+  that produced it; without this a defect found in one version could not be
+  traced to the reports it may have produced.
+
+### Distribution safety
+
+- **`scripts/check_public_surface.sh`, run in CI before the tests.** The code
+  was always meant to be public and the samples private, but nobody had checked
+  the documents. Nine files intended for publication named real client
+  projects, server share paths and the studio LAN address, and two leaks were
+  worse than that: the personal handover document was tracked, and
+  `rewrite_profiles.py` carried a client's project name as a profile label —
+  which had already shipped inside the built wheel. Public documents now use
+  case codenames; `PROJECT_CONTEXT.md`, `HANDOFF.md`, `work-reports/` and
+  `docs/MASS_USE_READINESS.md` are excluded from version control.
+- **`scripts/build_package.sh`**, with `--beta` producing a build whose
+  permanent deletion is compiled out rather than gated: `PURGE_ENABLED` is
+  False, `purge` disappears from the help and refuses with an explanation.
+  A beta is versioned `<version>b1` so it can never be confused with a build
+  that can delete. The script refuses to package private material.
+- `docs/RELEASING.md` records the release checklist and the recall procedure.
+  With no telemetry and no update check, recall is manual — which is why the
+  beta stays a named beta.
+- `docs/SUPPORT.md` rewritten: it promised a GitHub issue tracker that does not
+  exist, and asked for exactly the artifacts that should never be sent.
+
 ### Command line as a distribution
 
 With no Apple Developer account the application bundle cannot be handed to
@@ -127,7 +157,7 @@ See `docs/MASS_USE_READINESS.md` §1.
   reporting a problem could not say which version they had run.
 - Correct `SECURITY.md`, which described 0.4 behaviour and claimed permanent
   purge was hard-disabled when the shipped build permits it behind gates.
-- 92 regression tests pass; Swift typecheck clean.
+- 94 regression tests pass; Swift typecheck clean.
 
 ## 0.10.0 — workflow UX
 
