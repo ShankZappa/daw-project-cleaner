@@ -32,6 +32,20 @@ files.
   over SMB records decomposed names while the server may store composed ones,
   so a report was not portable between mounts.
 
+### The recycle bin was being scanned
+
+Scanning a Synology share walked `#recycle`. A deleted project keeps its `.npr`
+but loses its Audio folder, so every reference in it reported "Referenced media
+is missing from Audio tree" — alarming rows about material that had already
+been thrown away. On the production share this was **354 deleted
+projects against 702 real ones**: a third of the results, and a third of the scan time.
+
+- `#recycle`, `#snapshot`, `@eaDir` and `.@__thumb` join `.Trash*` in the
+  default exclusions, in the backend and in the interface's default field.
+- A file that could not be found shows `—` rather than `Zero KB`. Printing a
+  size claimed the file was empty on disk, which is a different and much more
+  alarming thing than not finding it.
+
 ### Results tables
 
 The two result tables were narrow slits that could not be made larger.

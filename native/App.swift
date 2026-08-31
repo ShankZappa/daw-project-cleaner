@@ -177,7 +177,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     let rootField = NSTextField()
     let quarantineField = NSComboBox()
     let exclusionsField = NSTextField(
-        string: "Backups, Backup, Edits, Mixdown, Mixdowns, Exports, Export, Bounces, Freeze, .Trash*"
+        string: "Backups, Backup, Edits, Mixdown, Mixdowns, Exports, Export, Bounces, Freeze, .Trash*, #recycle, #snapshot, @eaDir"
     )
     let backupPolicy = NSPopUpButton()
     let summaryLabel = NSTextField(labelWithString: "No scan yet")
@@ -2718,7 +2718,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
             case "name": cell.stringValue = item["name"] as? String ?? ""
             case "class": cell.stringValue = item["classification"] as? String ?? ""
             case "action": cell.stringValue = (item["candidate"] as? Bool) == true ? "Quarantine" : "Keep"
-            case "size": cell.stringValue = humanSize((item["size_bytes"] as? NSNumber)?.int64Value ?? 0)
+            case "size":
+                // A file we could not find has no size. Printing "Zero KB"
+                // claimed it was an empty file on disk, which is a different
+                // and much more alarming thing.
+                if let bytes = (item["size_bytes"] as? NSNumber)?.int64Value {
+                    cell.stringValue = humanSize(bytes)
+                } else {
+                    cell.stringValue = "—"
+                    cell.toolTip = "Not found on disk, so its size is unknown"
+                }
             case "reason": cell.stringValue = item["reason"] as? String ?? ""
             default: break
             }

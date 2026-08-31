@@ -25,6 +25,11 @@ DEFAULT_EXCLUSIONS = [
     "Backups", "Backup", "Auto Saves", "Autosaves", "Edits", "Mixdown", "Mixdowns", "Exports",
     "Export", "Bounces", "Freeze", ".daw-project-cleaner",
     ".daw-project-cleaner-quarantine", "DAW Project Cleaner Quarantine", ".Trash*",
+    # A deleted project keeps its .npr but loses its Audio folder, so every
+    # reference in it reads as missing media. Scanning a Synology share without
+    # these found 354 deleted projects against 702 real ones - a third of the
+    # results were the recycle bin, and each one looked alarming.
+    "#recycle", "#snapshot", "@eaDir", ".@__thumb",
 ]
 BACKUP_FOLDER_NAMES = {"backup", "backups", "auto saves", "autosaves"}
 

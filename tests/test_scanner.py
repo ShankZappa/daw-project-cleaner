@@ -373,6 +373,29 @@ class ScannerTests(unittest.TestCase):
             report = scan_root(root, backup_keep=0)
             self.assertEqual(report.backups[0].action, "quarantine")
 
+    def test_synology_recycle_bin_is_not_scanned(self):
+        """A deleted project keeps its .npr but loses its Audio folder.
+
+        Scanning a Synology share found 354 deleted projects against 702 real
+        ones, and every reference in them read as missing media.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            live = root / "Song"
+            (live / "Audio").mkdir(parents=True)
+            (live / "Audio" / "take.wav").write_bytes(b"take")
+            make_project(live / "song.npr", active=["take.wav"])
+            for system in ("#recycle", "@eaDir", "#snapshot"):
+                deleted = root / system / "Song"
+                deleted.mkdir(parents=True)
+                make_project(deleted / "song.npr", active=["take.wav"])
+
+            report = scan_root(root)
+            found = [Path(p.path) for p in report.projects]
+            self.assertEqual(len(found), 1, f"only the live project: {found}")
+            self.assertEqual(found[0].parent.name, "Song")
+            self.assertNotIn("#recycle", str(found[0]))
+
     def test_sole_readable_project_still_adopts_an_unmatched_backup(self):
         """The name-free fallback stays available when nothing can be confused."""
         with tempfile.TemporaryDirectory() as tmp:
