@@ -78,6 +78,15 @@ def _decode_root(payload: bytes) -> Tuple[Optional[str], Optional[str]]:
 
 
 def parse_chunks(data: bytes) -> List[Chunk]:
+    if not data:
+        # Cubase and Nuendo reserve a filename before writing its contents, so
+        # an empty file is usually a save that is still in progress or one that
+        # was interrupted - not a damaged project. Say so: the archive it sits
+        # in is live, and a scan can legitimately catch a file mid-write.
+        raise ProjectFormatError(
+            "file is empty (0 bytes) - a reserved name, an interrupted save, "
+            "or a save still in progress"
+        )
     if len(data) >= 16 and data[:4] == b"RIF2":
         container = "RIF2"
         form = data[12:16]

@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import stat
+import unicodedata
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
@@ -258,12 +259,31 @@ def _candidates(
     return list(found.values()), affected_projects
 
 
+def _resolve_recorded_path(raw: str) -> Path:
+    """Resolve a path recorded in a report, tolerating Unicode normalization.
+
+    macOS presents SMB names decomposed (NFD) while the server filesystem may
+    store them composed (NFC), so a path written by a scan does not always
+    resolve later. On the studio archive 4,775 of 8,719 recorded backups failed
+    to resolve for this reason alone - every one of them a name containing a
+    letter like the Estonian o-tilde. The bytes differ; the file is the same.
+    """
+    entry = Path(raw)
+    if entry.exists() or entry.is_symlink():
+        return entry
+    for form in ("NFC", "NFD"):
+        candidate = Path(unicodedata.normalize(form, raw))
+        if candidate.exists() or candidate.is_symlink():
+            return candidate
+    return entry
+
+
 def _backup_candidates(
     report: ScanReport, root: Path, selected_projects: Optional[Set[Path]]
 ) -> List[Tuple[Path, BackupResult]]:
     selected: List[Tuple[Path, BackupResult]] = []
     for backup in report.backups:
-        entry = Path(backup.path)
+        entry = _resolve_recorded_path(backup.path)
         _no_symlink_chain(entry, root)
         info = entry.lstat()
         if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):

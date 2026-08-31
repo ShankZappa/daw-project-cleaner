@@ -248,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     var mediaPage = 0
     var knownProjectPaths = Set<String>()
     var uiRefreshScheduled = false
-    var pendingScanProgress: (done: Int, total: Int, path: String)?
+    var pendingScanProgress: ScanProgressLine?
     var progressRefreshScheduled = false
     var lastProgressRender = Date.distantPast
 
@@ -1559,11 +1559,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
                     DispatchQueue.main.async { eventHandler?(event) }
                 } else if let scanProgress = self.parseScanProgress(line) {
                     DispatchQueue.main.async { [weak self] in
-                        self?.queueScanProgress(
-                            done: scanProgress.done,
-                            total: scanProgress.total,
-                            path: scanProgress.path
-                        )
+                        self?.queueScanProgress(scanProgress)
                     }
                 } else if !line.isEmpty {
                     ordinaryLines.append(line)
@@ -1609,7 +1605,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         }
     }
 
-    func parseScanProgress(_ line: String) -> (done: Int, total: Int, path: String)? {
+    struct ScanProgressLine {
+        var done = 0
+        var total = 0
+        var path = ""
+        var percent: String?
+        var bytes: String?
+        var rate: String?
+        var remaining: String?
+        var discovering = false
+        var measured: String?
+    }
+
+    /// Counting files says little when they range from a few hundred kilobytes
+    /// to tens of megabytes, so the backend reports bytes, rate and remaining
+    /// time. Discovery is announced separately because walking a large tree
+    /// happens before anything can be counted at all.
+    func parseScanProgress(_ line: String) -> ScanProgressLine? {
+        if line.hasPrefix("DISCOVER ") {
+            var value = ScanProgressLine()
+            value.discovering = true
+            value.path = String(line.dropFirst("DISCOVER ".count))
+            return value
+        }
+        if line.hasPrefix("MEASURED ") {
+            var value = ScanProgressLine()
+            value.measured = String(line.dropFirst("MEASURED ".count))
+            return value
+        }
         guard line.hasPrefix("["), let close = line.firstIndex(of: "]") else {
             return nil
         }
@@ -1619,12 +1642,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
               let done = Int(numbers[0]), let total = Int(numbers[1]) else {
             return nil
         }
-        let remainder = line[line.index(after: close)...]
-            .trimmingCharacters(in: .whitespaces)
-        return (done, total, remainder)
+        var value = ScanProgressLine()
+        value.done = done
+        value.total = total
+        let fields = line[line.index(after: close)...]
+            .components(separatedBy: " · ")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        value.path = fields.last ?? ""
+        for field in fields {
+            if field.hasSuffix("%") { value.percent = field }
+            else if field.hasSuffix("/s") { value.rate = field }
+            else if field.hasPrefix("remaining ") {
+                value.remaining = String(field.dropFirst("remaining ".count))
+            } else if field.contains("/") && !field.hasPrefix("/") {
+                value.bytes = field
+            }
+        }
+        return value
     }
 
-    func showScanProgress(done: Int, total: Int, path: String) {
+    func showScanProgress(
+        done: Int, total: Int, path: String,
+        percentText: String? = nil, bytesText: String? = nil,
+        rateText: String? = nil, remainingText: String? = nil,
+        discoveryDetail: String? = nil, measuredDetail: String? = nil
+    ) {
         if isNormalizedTransaction {
             progress.stopAnimation(nil)
             progress.isIndeterminate = false
@@ -1639,6 +1681,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
             return
         }
         guard isScanning else { return }
+        if let discovery = discoveryDetail {
+            progress.startAnimation(nil)
+            progress.isIndeterminate = true
+            phaseLabel.stringValue = "Finding projects"
+            progressCountLabel.stringValue = discovery.components(separatedBy: " · ").first ?? ""
+            statusLabel.stringValue = "Nothing can be counted until the folder has been walked. \(discovery)"
+            return
+        }
+        if let measured = measuredDetail {
+            progress.startAnimation(nil)
+            progress.isIndeterminate = true
+            phaseLabel.stringValue = "Ready to read"
+            progressCountLabel.stringValue = measured
+            statusLabel.stringValue = "Every file is read in full, so this is the work ahead."
+            return
+        }
         if done == 0 {
             progress.startAnimation(nil)
             progress.isIndeterminate = true
@@ -1651,16 +1709,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         progress.stopAnimation(nil)
         progress.isIndeterminate = false
         progress.minValue = 0
-        progress.maxValue = Double(max(total, 1))
-        progress.doubleValue = Double(done)
-        let percent = Int((Double(done) / Double(max(total, 1))) * 100)
+        progress.maxValue = 100
+        let fraction = Double(percentText?.dropLast().trimmingCharacters(in: .whitespaces) ?? "")
+        progress.doubleValue = fraction ?? (100.0 * Double(done) / Double(max(total, 1)))
         phaseLabel.stringValue = "Reading projects and backups"
-        progressCountLabel.stringValue = "\(done) of \(total) · \(percent)%"
-        statusLabel.stringValue = "Current file: \(name)"
+        var parts = ["\(done) of \(total) files"]
+        if let percentText { parts.append(percentText) }
+        if let bytesText { parts.append(bytesText) }
+        progressCountLabel.stringValue = parts.joined(separator: " · ")
+        var status = "Current file: \(name)"
+        if let rateText, let remainingText {
+            status = "\(rateText) · about \(remainingText) remaining · \(name)"
+        }
+        statusLabel.stringValue = status
     }
 
-    func queueScanProgress(done: Int, total: Int, path: String) {
-        pendingScanProgress = (done, total, path)
+    func queueScanProgress(_ value: ScanProgressLine) {
+        pendingScanProgress = value
         let elapsed = Date().timeIntervalSince(lastProgressRender)
         if elapsed >= 0.15 {
             renderPendingScanProgress()
@@ -1679,7 +1744,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         guard let value = pendingScanProgress else { return }
         pendingScanProgress = nil
         lastProgressRender = Date()
-        showScanProgress(done: value.done, total: value.total, path: value.path)
+        showScanProgress(
+            done: value.done, total: value.total, path: value.path,
+            percentText: value.percent, bytesText: value.bytes,
+            rateText: value.rate, remainingText: value.remaining,
+            discoveryDetail: value.discovering ? value.path : nil,
+            measuredDetail: value.measured
+        )
     }
 
     @objc func startScan() {
@@ -1939,25 +2010,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         summaryLabel.stringValue = "\(prefix): \(projects.count) projects · \(backups.count) backups (\(backupQuarantine.count) to quarantine, \(humanSize(backupBytes))) · \(uniqueCandidates.count) review files · \(humanSize(potentialBytes)) potential · \(ready) Ready · \(errors) errors · \(selectedProjectPaths.count) selected (\(humanSize(selectedBytes)))"
         if partial {
             cleanupSelectionLabel.stringValue = "The scan is still running. Cleanup stays locked until validation finishes."
-        } else if errors > 0 {
-            cleanupSelectionLabel.stringValue = "Cleanup locked: resolve \(errors) scan error\(errors == 1 ? "" : "s") and scan again."
+        } else if ready == 0 && errors > 0 {
+            cleanupSelectionLabel.stringValue = "No projects passed the validated cleanup gate. \(errors) project\(errors == 1 ? "" : "s") could not be read; media in those folders is excluded."
         } else if ready == 0 {
             cleanupSelectionLabel.stringValue = "No projects passed the validated cleanup gate. Review Report only rows in Scan & Review."
         } else if selectedProjectPaths.isEmpty {
             cleanupSelectionLabel.stringValue = "\(ready) project\(ready == 1 ? " is" : "s are") Ready. Select the projects to clean in Scan & Review."
         } else {
-            cleanupSelectionLabel.stringValue = "Ready to quarantine unused media from \(selectedProjectPaths.count) selected project\(selectedProjectPaths.count == 1 ? "" : "s") — \(humanSize(selectedBytes))."
+            let note = errors > 0
+                ? " \(errors) unreadable project\(errors == 1 ? "" : "s") elsewhere in the scan; media in those folders is excluded."
+                : ""
+            cleanupSelectionLabel.stringValue = "Ready to quarantine unused media from \(selectedProjectPaths.count) selected project\(selectedProjectPaths.count == 1 ? "" : "s") — \(humanSize(selectedBytes)).\(note)"
         }
     }
 
     func updateApplyState() {
         let ready = readyProjectPaths()
-        let errors = projects.contains {
-            ($0["status"] as? String) == "error"
-        } || backups.contains {
-            ($0["status"] as? String) == "error"
-        }
-        rewriteReady = scanCompleted && !errors && !selectedProjectPaths.isEmpty &&
+        // An unreadable project used to lock Apply for the entire scan. On the
+        // studio archive one 0-byte failed save among 1,725 projects made
+        // cleanup unavailable everywhere. The backend already excludes media in
+        // an unreadable project's folder and validates each selected project,
+        // so the selection being a subset of Ready is the gate that matters.
+        rewriteReady = scanCompleted && !selectedProjectPaths.isEmpty &&
             selectedProjectPaths.isSubset(of: ready)
         applyButton.isEnabled = rewriteReady && running == nil
         selectAllButton.title = "Select Ready (\(ready.count))"

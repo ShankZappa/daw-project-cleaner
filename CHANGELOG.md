@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased — archive-scale proportionality and scan progress
+
+Found by running a full scan of the studio server from the Mac mini. Cleanup
+could not be started at all, and the same sentence was attached to thousands of
+files.
+
+- **One unreadable project no longer disables cleanup for a whole archive.**
+  `_apply_global_guards` was a single boolean over the entire scan: any
+  unreadable project cleared every candidate everywhere. On the server one
+  0-byte file among 1,725 projects disabled **81,216 candidates**, of which
+  only **12** were actually in an affected folder. The guard is now bounded to
+  the folder the doubt belongs to, using the same rule as
+  `find_backup_audio_dir`. Measured against the real report: 81,204 candidates
+  and 506.9 GiB return for review.
+- **The interface no longer locks Apply because of an unreadable project
+  elsewhere.** The selection already has to be a subset of Ready, which the
+  backend validates per project, so the global error term only blocked work.
+  The count is now reported beside the selection instead of replacing it.
+- **`archive_queue` used its own narrower definition of a resolved
+  reference.** The audit and the separation planner share
+  `RESOLVED_REFERENCE_STATES = {"unique", "path_evidenced"}`; the queue tested
+  against `{None, "unique"}` and reported every path-evidenced reference as
+  blocking — **179,404 of 191,413 blockers, 93.7%**. Blocked families drop from
+  98 to 41. The definition is now imported, not duplicated.
+- **An empty project file is described accurately.** Cubase and Nuendo reserve
+  a filename before writing its contents, so a 0-byte project is a reserved
+  name, an interrupted save or a save still in progress — not a damaged
+  project, and a live archive can be scanned while one is being written.
+- **A recorded path resolves across Unicode normalisation.** A report written
+  over SMB records decomposed names while the server may store composed ones,
+  so a report was not portable between mounts.
+
+### Scan progress
+
+A full archive scan reads every project and backup in full and gave no
+indication of how far along it was.
+
+- Discovery reports as it walks. Nothing can be counted until the tree has
+  been traversed, which on a large share is minutes of silence.
+- The total is measured in **bytes**, not files. Counting files is misleading
+  when they range from a few hundred kilobytes to tens of megabytes.
+- Progress carries percent complete, bytes done and total, observed rate,
+  elapsed time and **estimated time remaining**, so a multi-day scan can be
+  planned around.
+
 ## 0.11.0 — recovery hardening and application shell
 
 Every defect in this release was found by testing against the real Studio89

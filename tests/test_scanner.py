@@ -85,12 +85,34 @@ class ScannerTests(unittest.TestCase):
                 (folder / "Audio").mkdir(parents=True)
                 make_project(folder / f"{name}.npr")
             events = []
-            scan_root(root, workers=1, progress=lambda done, total, path: events.append(
-                (done, total, path)
-            ))
-            self.assertEqual(events[0], (0, 2, ""))
-            self.assertEqual([event[0] for event in events], [0, 1, 2])
-            self.assertTrue(events[-1][2].endswith(".npr"))
+            scan_root(root, workers=1, progress=events.append)
+            reading = [e for e in events if e.phase in {"measured", "reading"}]
+            self.assertEqual(reading[0].phase, "measured")
+            self.assertEqual(reading[0].total, 2)
+            self.assertEqual([e.done for e in reading], [0, 1, 2])
+            self.assertTrue(reading[-1].path.endswith(".npr"))
+            # Bytes, not counts: files range from a few hundred KB to tens of MB.
+            self.assertGreater(reading[0].total_bytes, 0)
+            self.assertEqual(reading[-1].done_bytes, reading[-1].total_bytes)
+            self.assertAlmostEqual(reading[-1].percent, 100.0, places=3)
+            self.assertIsNone(reading[-1].seconds_remaining)
+
+    def test_scan_reports_discovery_before_it_can_count_anything(self):
+        """Walking a 2 TB tree over SMB is minutes of silence otherwise."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for index in range(250):
+                folder = root / f"Artist {index:03d}" / "Song"
+                (folder / "Audio").mkdir(parents=True)
+                make_project(folder / "song.npr")
+            events = []
+            scan_root(root, workers=2, progress=events.append)
+            phases = [e.phase for e in events]
+            self.assertIn("discovering", phases)
+            self.assertLess(
+                phases.index("discovering"), phases.index("measured"),
+                "discovery must report before the total is known",
+            )
 
     def test_shared_active_media_is_globally_protected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -148,7 +170,34 @@ class ScannerTests(unittest.TestCase):
             report = scan_root(root)
             candidate = next(x for p in report.projects for x in p.media if x.name == "unused.wav")
             self.assertFalse(candidate.candidate)
-            self.assertIn("scan contains", candidate.reason)
+            self.assertIn("could not be read", candidate.reason)
+
+    def test_an_unreadable_project_does_not_disable_an_unrelated_folder(self):
+        """One corrupt file must not disable cleanup across a whole archive.
+
+        On the studio server a single 0-byte failed save disabled 81,216
+        candidates across 1,725 projects, because the guard was one boolean
+        over the entire scan.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            broken = root / "Artist A" / "Song"
+            (broken / "Audio").mkdir(parents=True)
+            (broken / "Audio" / "near.wav").write_bytes(b"x")
+            make_project(broken / "song.npr", unused=["near.wav"])
+            (broken / "broken.cpr").write_bytes(b"not a project")
+
+            healthy = root / "Artist B" / "Other"
+            (healthy / "Audio").mkdir(parents=True)
+            (healthy / "Audio" / "far.wav").write_bytes(b"y")
+            make_project(healthy / "other.npr", unused=["far.wav"])
+
+            report = scan_root(root)
+            near = next(x for p in report.projects for x in p.media if x.name == "near.wav")
+            far = next(x for p in report.projects for x in p.media if x.name == "far.wav")
+            self.assertFalse(near.candidate, "media beside the unreadable project stays protected")
+            self.assertIn("could not be read", near.reason)
+            self.assertTrue(far.candidate, "an unrelated folder must stay cleanable")
 
     def test_shared_pool_only_path_is_counted_once_in_summary(self):
         with tempfile.TemporaryDirectory() as tmp:

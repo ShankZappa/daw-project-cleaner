@@ -491,6 +491,40 @@ class TransactionTests(unittest.TestCase):
             self.assertEqual(restore_session(session), 1)
             self.assertTrue(media.is_file())
 
+    def test_recorded_path_resolves_across_unicode_normalisation(self):
+        """A report written over SMB records NFD; the server may store NFC.
+
+        On the studio archive this alone made 4,775 of 8,719 recorded backups
+        unresolvable, and one unresolvable entry aborts the whole operation.
+        """
+        import unicodedata
+        from daw_project_cleaner.transaction import _resolve_recorded_path
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            composed = "Rebib lohki".replace("o", "\u00f5")      # NFC
+            decomposed = unicodedata.normalize("NFD", composed)
+            self.assertNotEqual(composed, decomposed)
+
+            folder = root / composed
+            folder.mkdir()
+            target = folder / "song.bak"
+            target.write_bytes(b"content")
+
+            # Ask for the other form than the one on disk.
+            on_disk = next(root.iterdir()).name
+            other = (
+                unicodedata.normalize("NFD", on_disk)
+                if unicodedata.is_normalized("NFC", on_disk)
+                else unicodedata.normalize("NFC", on_disk)
+            )
+            asked = str(root / other / "song.bak")
+            resolved = _resolve_recorded_path(asked)
+            self.assertTrue(
+                resolved.is_file(),
+                "a recorded path must resolve whichever normalisation it carries",
+            )
+            self.assertEqual(resolved.read_bytes(), b"content")
+
     def test_shared_quarantine_location_round_trip(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)

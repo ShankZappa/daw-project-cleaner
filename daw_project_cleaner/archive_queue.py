@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Set
 
+from .archive_audit import RESOLVED_REFERENCE_STATES
+
 
 WORKFLOW_STAGES = [
     "normalize_in_nuendo_15",
@@ -57,7 +59,11 @@ def _project_blockers(project: Dict) -> List[Dict[str, str]]:
         return blockers
     for reference in project.get("references", []):
         resolution = reference.get("resolution")
-        if resolution not in {None, "unique"}:
+        # A path-evidenced reference is resolved, not a blocker. This used a
+        # narrower hardcoded set than the audit and the separation planner,
+        # so every successfully resolved path-evidenced reference was reported
+        # as blocking: 179,355 of the 191,413 blockers on the studio archive.
+        if resolution is not None and resolution not in RESOLVED_REFERENCE_STATES:
             blockers.append({
                 "kind": f"{resolution}_media_reference",
                 "project": project.get("path", ""),

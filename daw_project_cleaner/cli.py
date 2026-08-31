@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 from . import PURGE_ENABLED, __version__
 from .model import report_from_dict
@@ -45,6 +46,37 @@ def _size(value: int) -> str:
             return f"{amount:.1f} {unit}"
         amount /= 1024
     return str(value)
+
+
+def _duration(seconds: Optional[float]) -> str:
+    if seconds is None:
+        return "--:--"
+    seconds = int(seconds)
+    hours, rest = divmod(seconds, 3600)
+    minutes, secs = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes}:{secs:02d}"
+
+
+def _scan_progress_line(state) -> str:
+    """One line carrying enough to decide when to come back.
+
+    A count of files says little when they range from a few hundred KB to tens
+    of megabytes, so the percentage is by bytes, with the observed rate and the
+    remaining time beside it.
+    """
+    if state.phase == "discovering":
+        return f"DISCOVER {state.done} projects found · {state.path}"
+    if state.phase == "measured":
+        return (
+            f"MEASURED {state.total} files · {_size(state.total_bytes)} to read"
+        )
+    rate = state.bytes_per_second
+    return (
+        f"[{state.done}/{state.total}] {state.percent:5.1f}% · "
+        f"{_size(state.done_bytes)}/{_size(state.total_bytes)} · "
+        f"{_size(int(rate))}/s · elapsed {_duration(state.elapsed)} · "
+        f"remaining {_duration(state.seconds_remaining)} · {state.path}"
+    )
 
 
 def main() -> None:
@@ -408,7 +440,7 @@ def _dispatch() -> None:
         args.root,
         DEFAULT_EXCLUSIONS + args.exclude,
         args.workers,
-        lambda done, total, path: print(f"[{done}/{total}] {path}", flush=True),
+        lambda state: print(_scan_progress_line(state), flush=True),
         result_callback=(
             lambda result: print(
                 "PROJECT_EVENT " + json.dumps(

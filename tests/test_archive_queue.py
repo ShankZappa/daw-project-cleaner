@@ -64,6 +64,29 @@ class ArchiveQueueTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "sampled audit"):
                 build_archive_queue(audit)
 
+    def test_path_evidenced_reference_is_not_a_blocker(self):
+        """It is a resolved state, and the audit and planner both treat it so.
+
+        The queue used its own narrower set and reported every path-evidenced
+        reference as blocking: 179,355 of the 191,413 blockers on the studio
+        archive, which made 98 of 253 families look blocked.
+        """
+        from daw_project_cleaner.archive_queue import _project_blockers
+        project = {
+            "status": "parsed",
+            "path": "/a/song.npr",
+            "references": [
+                {"name": "kept.wav", "resolution": "unique"},
+                {"name": "evidenced.wav", "resolution": "path_evidenced"},
+                {"name": "gone.wav", "resolution": "missing"},
+                {"name": "two.wav", "resolution": "ambiguous"},
+            ],
+        }
+        kinds = [b["kind"] for b in _project_blockers(project)]
+        self.assertEqual(
+            kinds, ["missing_media_reference", "ambiguous_media_reference"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

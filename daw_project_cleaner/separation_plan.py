@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set
 
+from .archive_audit import RESOLVED_REFERENCE_STATES
+
 
 ROLE_FOLDERS = {
     "Audio": "Audio",
@@ -22,7 +24,6 @@ ROLE_FOLDERS = {
     "Mixdown": "Mixdown",
     "Other": "Media",
 }
-RESOLVED_REFERENCE_STATES = {"unique", "path_evidenced"}
 
 
 def _name_key(value: str) -> str:
