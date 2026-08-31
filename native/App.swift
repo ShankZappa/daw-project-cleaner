@@ -377,14 +377,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
 
     func buildWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 1080, height: 760),
+            contentRect: NSRect(x: 0, y: 0, width: 1180, height: 900),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         window.title = "DAW Project Cleaner"
         window.center()
-        window.minSize = NSSize(width: 900, height: 580)
+        window.minSize = NSSize(width: 900, height: 720)
         window.maxSize = NSSize(width: 100_000, height: 100_000)
         window.collectionBehavior.insert(.fullScreenPrimary)
         window.setFrameAutosaveName("DAWProjectCleanerMainWindow")
@@ -547,7 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         projectScroll.borderType = .bezelBorder
         projectScroll.setContentHuggingPriority(.defaultLow, for: .vertical)
         projectScroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        projectScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
+        projectScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 150).isActive = true
         let mediaScroll = NSScrollView()
         mediaScroll.documentView = mediaTable
         mediaScroll.hasVerticalScroller = true
@@ -555,7 +555,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         mediaScroll.borderType = .bezelBorder
         mediaScroll.setContentHuggingPriority(.defaultLow, for: .vertical)
         mediaScroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        mediaScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
+        mediaScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 150).isActive = true
         let projectHeader = NSStackView(views: [sectionTitle("Projects"), NSView(), previousProjectsButton, projectPageLabel, nextProjectsButton])
         projectHeader.orientation = .horizontal
         projectHeader.spacing = 8
@@ -573,7 +573,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         split.dividerStyle = .thin
         split.addArrangedSubview(projectPane)
         split.addArrangedSubview(mediaPane)
-        split.setPosition(250, ofDividerAt: 0)
+        // Equal holding priorities so the divider actually drags instead of one
+        // pane always winning, and a proportional starting split rather than a
+        // fixed 250pt that left the lower table a few rows tall.
+        split.setHoldingPriority(NSLayoutConstraint.Priority(250), forSubviewAt: 0)
+        split.setHoldingPriority(NSLayoutConstraint.Priority(250), forSubviewAt: 1)
+        split.autosaveName = "DAWProjectCleanerResultsSplit"
+        DispatchQueue.main.async { [weak split] in
+            guard let split, split.frame.height > 0 else { return }
+            split.setPosition(split.frame.height * 0.55, ofDividerAt: 0)
+        }
 
         progress.isIndeterminate = false
         progress.minValue = 0
@@ -644,11 +653,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
             sectionTitle("2. Review the safety result"),
             summaryLabel, selectionRow,
             phaseRow, progress, statusLabel,
-            split,
         ])
         scanStack.orientation = .vertical
         scanStack.alignment = .leading
         scanStack.spacing = 7
+        // With the default gravity distribution the extra height of a resized
+        // window went into the gaps between controls, so the results tables
+        // stayed at their minimum however large the window got. Filling makes
+        // the lowest-hugging view - the results split - absorb it.
+        scanStack.distribution = .fill
 
         let cleanupStack = NSStackView(views: [
             sectionTitle("Cleanup"),
@@ -679,7 +692,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         recoveryStack.alignment = .leading
         recoveryStack.spacing = 10
 
-        let scanPage = page(with: scanStack)
+        // The results split gets its own container pinned below the controls and
+        // to the bottom of the page. Inside a stack view it stayed frozen at its
+        // minimum height however large the window was: the extra space went into
+        // the gaps between controls instead of into the tables.
+        let scanPage = NSView()
+        scanStack.translatesAutoresizingMaskIntoConstraints = false
+        split.translatesAutoresizingMaskIntoConstraints = false
+        scanPage.addSubview(scanStack)
+        scanPage.addSubview(split)
+        NSLayoutConstraint.activate([
+            scanStack.leadingAnchor.constraint(equalTo: scanPage.leadingAnchor, constant: 14),
+            scanStack.trailingAnchor.constraint(equalTo: scanPage.trailingAnchor, constant: -14),
+            scanStack.topAnchor.constraint(equalTo: scanPage.topAnchor, constant: 14),
+            split.topAnchor.constraint(equalTo: scanStack.bottomAnchor, constant: 10),
+            split.leadingAnchor.constraint(equalTo: scanPage.leadingAnchor, constant: 14),
+            split.trailingAnchor.constraint(equalTo: scanPage.trailingAnchor, constant: -14),
+            split.bottomAnchor.constraint(equalTo: scanPage.bottomAnchor, constant: -12),
+        ])
         let cleanupPage = page(with: cleanupStack)
         let recoveryPage = page(with: recoveryStack)
         workspaceViews = ["scan": scanPage, "cleanup": cleanupPage, "recovery": recoveryPage]
@@ -687,7 +717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         split.setContentHuggingPriority(.defaultLow, for: .vertical)
         split.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         for view in [rootRow, advancedOptionsButton, scanOptionsStack,
-                     summaryLabel, selectionRow, phaseRow, split, progress, statusLabel] {
+                     summaryLabel, selectionRow, phaseRow, progress, statusLabel] {
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: scanStack.widthAnchor).isActive = true
         }
@@ -699,7 +729,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSTableViewDataSource,
             view.translatesAutoresizingMaskIntoConstraints = false
             view.widthAnchor.constraint(equalTo: recoveryStack.widthAnchor).isActive = true
         }
-        split.heightAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
+        split.heightAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
 
         // Workspaces are stacked in one container and swapped by the sidebar,
         // so every page keeps its state while another one is on screen.

@@ -32,6 +32,23 @@ files.
   over SMB records decomposed names while the server may store composed ones,
   so a report was not portable between mounts.
 
+### Results tables
+
+The two result tables were narrow slits that could not be made larger.
+
+- **They now grow with the window.** The results split sat inside the same
+  stack view as the setup controls, where the extra height of a resized window
+  went into the gaps between controls instead of into the tables — so they
+  stayed at their minimum whatever the window size. The split now has its own
+  container, pinned below the controls and to the bottom of the page. Measured:
+  raising the window from 720 to 920 points takes the split from 420 to 519 and
+  the project table from 180 to 230.
+- **The divider drags.** Both panes hold with equal priority and the position
+  is remembered between launches, so the balance between projects and files is
+  the operator's choice.
+- Each table keeps a 150-point floor rather than 90, the split 420 rather than
+  220, and the window opens at 1180x900 with a 900x720 minimum.
+
 ### Scan progress
 
 A full archive scan reads every project and backup in full and gave no
