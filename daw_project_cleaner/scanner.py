@@ -455,6 +455,14 @@ def inspect_project(project: Path, exclusions: Sequence[str]) -> ProjectResult:
     return result
 
 
+def _inside_root(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
 def _is_uncertain(project: ProjectResult) -> bool:
     """A project whose media evidence we do not have."""
     return project.status == "error" or (
@@ -485,9 +493,18 @@ def _uncertainty_scopes(
         if not _is_uncertain(project):
             continue
         audio = find_backup_audio_dir(Path(project.path), root)
-        if audio is None:
+        if audio is not None:
+            scopes.add(os.path.normcase(os.path.normpath(str(audio.parent))))
+            continue
+        # No Audio folder anywhere above it. Falling back to global doubt made
+        # 28 old Cubase projects, whose media names this reader cannot extract,
+        # suppress 296 GB of evidence across 953 readable ones. A project with
+        # no Audio folder maps no media, so its own folder is the honest bound:
+        # whatever it references is not something this scan resolved.
+        folder = Path(project.path).parent
+        if not _inside_root(folder, root):
             return None
-        scopes.add(os.path.normcase(os.path.normpath(str(audio.parent))))
+        scopes.add(os.path.normcase(os.path.normpath(str(folder))))
     return scopes
 
 

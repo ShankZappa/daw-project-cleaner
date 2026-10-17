@@ -76,6 +76,18 @@ indication of how far along it was.
   elapsed time and **estimated time remaining**, so a multi-day scan can be
   planned around.
 
+## Unreleased — bound doubt to the folder it belongs to
+
+- **A project with no Audio folder no longer suppresses evidence archive-wide.**
+  The scope of an unreadable or unclassifiable project was resolved by walking
+  up for an Audio folder; when that found nothing the guard fell back to global
+  doubt. On the production archive 28 old 32-bit Cubase projects — readable
+  containers whose media filenames this reader cannot extract — suppressed
+  **296 GB of evidence across 953 readable projects**, and the scan reported
+  zero candidates. A project with no Audio folder maps no media, so its own
+  folder is the honest bound. Measured on that archive: candidates went from
+  **0 to 23,453 files / 94.2 GB**, with nothing left globally suppressed.
+
 ## 0.11.0 — recovery hardening and application shell
 
 Every defect in this release was found by testing against the real Studio89

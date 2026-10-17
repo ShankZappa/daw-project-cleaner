@@ -396,6 +396,36 @@ class ScannerTests(unittest.TestCase):
             self.assertEqual(found[0].parent.name, "Song")
             self.assertNotIn("#recycle", str(found[0]))
 
+    def test_a_project_without_an_audio_folder_bounds_doubt_to_itself(self):
+        """An old project whose media names cannot be read must not veto a whole archive.
+
+        Twenty-eight 32-bit Cubase projects with no Audio folder and no
+        readable filename fields suppressed 296 GB of evidence across 953
+        readable projects, because the scope could not be resolved by looking
+        for an Audio folder and the guard fell back to global doubt.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            opaque = root / "Old Show" / "Song"
+            opaque.mkdir(parents=True)
+            # Parses, but the reader finds no audio filename fields and there
+            # is no Audio folder anywhere above it.
+            make_project(opaque / "song.cpr", container="RIFF")
+
+            healthy = root / "Album" / "Track"
+            (healthy / "Audio").mkdir(parents=True)
+            (healthy / "Audio" / "unused.wav").write_bytes(b"x" * 64)
+            make_project(healthy / "track.npr", unused=["unused.wav"])
+
+            report = scan_root(root)
+            candidate = next(
+                m for p in report.projects for m in p.media if m.name == "unused.wav"
+            )
+            self.assertTrue(
+                candidate.candidate,
+                f"an unrelated folder must stay cleanable: {candidate.reason}",
+            )
+
     def test_sole_readable_project_still_adopts_an_unmatched_backup(self):
         """The name-free fallback stays available when nothing can be confused."""
         with tempfile.TemporaryDirectory() as tmp:
