@@ -1,5 +1,50 @@
 # DAW Project Cleaner
 
+> **Status: work in progress — not ready for production use.**
+> Scanning, reporting and recoverable quarantine work and are covered by tests.
+> The two steps that would make cleanup *final* — rewriting project files so
+> the DAW stops looking for removed media, and permanent deletion — are
+> **deliberately locked** until they are validated in the DAW itself.
+> Do not run cleanup on archives you have no other copy of.
+
+## Product owner notes
+
+I own this product: I defined the problem, the scope, the safety rules and
+the release gates, and directed the implementation.
+
+- **Problem.** Studio archives of Cubase/Nuendo projects grow to terabytes of
+  audio that no arrangement uses any more. Manual cleanup is slow; naive
+  automatic deletion breaks projects because media is shared between projects
+  and project formats differ across versions.
+- **Users.** Studio engineers and archivists maintaining their own project
+  archives on local disks or a NAS.
+- **Key decisions.**
+  - *Evidence before action.* The default product is a read-only inventory and
+    report. Cleanup is an opt-in, staged path: quarantine → test in the DAW →
+    restore or keep.
+  - *Fail closed.* A file that only *looks* unreferenced is never enough to
+    authorize deletion. Shared media, ambiguous references and unknown formats
+    block the item instead of guessing.
+  - *Permanent purge is hard-disabled in source* until project-file reference
+    removal is implemented and validated. A public beta build compiles it out.
+  - *Privacy guard in the release process.* `scripts/check_public_surface.sh`
+    refuses to publish if any tracked file contains client or infrastructure
+    data — it was added after an audit found such data in documents meant for
+    publication.
+  - *No signed app distribution* (no Apple Developer account): the Python
+    package is the product; the macOS app is for internal use.
+- **Validated on real data.** Tested against a production studio archive on a
+  NAS; recovery paths (force-quit, lost mount, power cut mid-cleanup) are
+  resolved from the filesystem rather than from recorded status.
+- **What is next.** Project-file reference rewriting, validated by reopening
+  every rewritten project in the DAW, and only then a permanent-delete path.
+
+See also the sibling product idea
+[Nuendo Project Builder](https://github.com/ShankZappa/nuendo-project-builder),
+which depends on this product reaching a stable release first.
+
+---
+
 DAW Project Cleaner is an independent, local, safety-first macOS utility that
 inventories Cubase and Nuendo project archives. It finds `.cpr` and `.npr`
 projects recursively, identifies their embedded writer/version, reports media
