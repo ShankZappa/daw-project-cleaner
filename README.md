@@ -7,6 +7,10 @@
 > **deliberately locked** until they are validated in the DAW itself.
 > Do not run cleanup on archives you have no other copy of.
 
+![DAW Project Cleaner — read-only scan of a demo archive: every project is "Report only", and pool-side media is flagged as a candidate to verify in the DAW, not deleted](docs/images/screenshot.png)
+
+*Scan of a synthetic demo archive; no real projects are shown.*
+
 ## Product owner notes
 
 I own this product: I defined the problem, the scope, the safety rules and
