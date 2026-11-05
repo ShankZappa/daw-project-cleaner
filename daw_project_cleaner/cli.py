@@ -79,6 +79,33 @@ def _scan_progress_line(state) -> str:
     )
 
 
+def _utf8_output() -> None:
+    """Write UTF-8, a line at a time, whatever locale the backend inherited.
+
+    The app reads stdout and stderr through one pipe and decodes each line as
+    UTF-8, dropping a line that is not. The locale used to decide: under an
+    ASCII stdout the first progress line raised UnicodeEncodeError (its
+    separator is a middle dot) and ended the scan without a report, and under
+    an ISO-8859 locale every line reached the app as undecodable bytes until a
+    decomposed (NFD) name - how macOS presents SMB and exFAT names - could not
+    be encoded at all. The frozen backend ignores PYTHONIOENCODING, so this
+    cannot be left to the environment. backslashreplace keeps even an
+    unencodable lone surrogate from killing a scan; the JSON report, not this
+    text, is the record.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(
+                encoding="utf-8", errors="backslashreplace", line_buffering=True
+            )
+        except (OSError, ValueError):
+            # A closed or detached stream keeps what it had.
+            continue
+
+
 def main() -> None:
     """Present an expected refusal as a sentence, not as a stack trace.
 
@@ -87,6 +114,7 @@ def main() -> None:
     native app put that traceback straight into an alert. Unexpected exceptions
     keep their traceback: those are defects and must stay visible.
     """
+    _utf8_output()
     try:
         _dispatch()
     except SafetyError as exc:
